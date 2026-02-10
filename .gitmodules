@@ -1,0 +1,3 @@
+[submodule "unrealircd-tests"]
+	path = unrealircd-tests
+	url = https://github.com/blazium-games/unrealircd-tests.git
