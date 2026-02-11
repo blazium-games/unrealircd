@@ -1,6 +1,7 @@
 # PowerShell script to watch GitHub Actions workflow runs
 # Uses gh CLI to monitor runs, detect success/failure, download logs on failure,
 # and output JSON or verbose debug logging
+# version: 1
 
 param(
     [Parameter(Mandatory = $false)]
