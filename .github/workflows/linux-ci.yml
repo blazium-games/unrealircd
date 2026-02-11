@@ -39,6 +39,7 @@ jobs:
         with:
           persist-credentials: false
           fetch-depth: 1
+          submodules: recursive
 
       - name: Install dependencies
         run: |
@@ -51,6 +52,28 @@ jobs:
       - name: Install python dependencies
         run: |
           python -m pip install --break-system-packages pyasyncore pyasynchat
+
+      - name: fix-permissions
+        run: |
+          # Core build scripts
+          chmod +x Config
+          chmod +x configure
+          chmod +x autogen.sh
+          # Autoconf scripts
+          chmod +x autoconf/install-sh
+          chmod +x autoconf/config.guess
+          chmod +x autoconf/config.sub
+          # Build module script (if present)
+          [ -f src/buildmod ] && chmod +x src/buildmod || true
+          # Test scripts
+          chmod +x extras/build-tests/nix/build
+          chmod +x extras/build-tests/nix/run-tests
+          chmod +x extras/build-tests/nix/select-config
+          # Extras patch scripts
+          chmod +x extras/patches/patch_spamfilter_conf
+          # Make all scripts in extras executable
+          find extras -type f -name "*.sh" -exec chmod +x {} \;
+          find extras/build-tests -type f ! -name "*.conf" ! -name "*.txt" -exec chmod +x {} \;
 
       - name: Build
         run: extras/build-tests/nix/build

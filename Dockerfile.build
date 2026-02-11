@@ -1,0 +1,112 @@
+# Dockerfile for building UnrealIRCd server
+# Based on Ubuntu to match CI environment
+
+FROM ubuntu:latest AS builder
+
+# Set environment variables
+ENV DEBIAN_FRONTEND=noninteractive \
+    NOSERVICES=1 \
+    RUNTESTFLAGS="-slightlyfast" \
+    MAKE="make -j4" \
+    CPPFLAGS="-DFAKELAG_CONFIGURABLE -DNOREMOVETMP -DRAWCMDLOGGING"
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    pkg-config \
+    libssl-dev \
+    libpcre2-dev \
+    libargon2-dev \
+    libsodium-dev \
+    libc-ares-dev \
+    libcurl4-openssl-dev \
+    libjansson-dev \
+    autoconf \
+    automake \
+    libtool \
+    git \
+    python3 \
+    python3-pip \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Python dependencies
+RUN python3 -m pip install --break-system-packages pyasyncore \
+    && python3 -m pip install --break-system-packages pyasynchat
+
+# Create build and output directories
+RUN mkdir -p /build/bin /build/modules /build/logs
+
+# Set working directory
+WORKDIR /usr/src/unrealircd
+
+# Copy source code
+COPY . .
+
+# Fix permissions and line endings for all scripts
+RUN apt-get update && apt-get install -y dos2unix \
+    && chmod +x Config configure autogen.sh \
+    && chmod +x autoconf/install-sh autoconf/config.guess autoconf/config.sub \
+    && ([ -f src/buildmod ] && chmod +x src/buildmod || true) \
+    && chmod +x extras/build-tests/nix/build \
+    && chmod +x extras/build-tests/nix/run-tests \
+    && chmod +x extras/build-tests/nix/select-config \
+    && chmod +x extras/patches/patch_spamfilter_conf \
+    && find extras -type f -name "*.sh" -exec chmod +x {} \; \
+    && find extras/build-tests -type f ! -name "*.conf" ! -name "*.txt" -exec chmod +x {} \; \
+    && find extras/build-tests -type f -name "build" -exec dos2unix {} \; \
+    && find extras/build-tests -type f -name "run-tests" -exec dos2unix {} \; \
+    && find extras/build-tests -type f -name "select-config" -exec dos2unix {} \; \
+    && find . -type f -name "*.sh" -exec dos2unix {} \; \
+    && find . -type f -name "*.SH" -exec dos2unix {} \; \
+    && find . -type f -name "*.in" -exec dos2unix {} \; \
+    && find . -type f -name "configure*" -exec dos2unix {} \; \
+    && find . -type f -name "Config" -exec dos2unix {} \; \
+    && find . -type f -name "*.conf" -exec dos2unix {} \; \
+    && find extras/build-tests/nix/configs -type f -exec dos2unix {} \; \
+    && find autoconf -type f ! -name "*.m4" -exec dos2unix {} \; \
+    && find . -type f -executable ! -name "*.o" ! -name "*.so" ! -name "*.a" ! -name "*.txt" ! -name "*.md" ! -name "*.c" ! -name "*.h" ! -name "*.m4" -exec dos2unix {} \; \
+    && rm -rf /var/lib/apt/lists/*
+
+# Run the build process with full logging
+RUN bash -c 'echo "=== Starting UnrealIRCd Build Process ===" \
+    && echo "Build started at: $(date)" \
+    && echo "Environment:" \
+    && echo "  NOSERVICES=${NOSERVICES}" \
+    && echo "  RUNTESTFLAGS=${RUNTESTFLAGS}" \
+    && echo "  CPPFLAGS=${CPPFLAGS}" \
+    && echo "  MAKE=${MAKE}" \
+    && bash extras/build-tests/nix/build 2>&1 | tee /build/logs/build.log' \
+    || bash -c 'echo "Build failed!" && tail -n 5000 config.log > /build/logs/config-error.log && exit 1'
+
+# Copy built binaries and modules to output directory
+RUN cp -r ~/unrealircd/bin/* /build/bin/ 2>/dev/null || true \
+    && cp -r ~/unrealircd/modules/* /build/modules/ 2>/dev/null || true \
+    && cp -r ~/unrealircd/conf /build/ 2>/dev/null || true \
+    && cp -r ~/unrealircd/lib /build/ 2>/dev/null || true
+
+# Final output stage - minimal image with just the built server
+FROM ubuntu:latest
+
+RUN apt-get update && apt-get install -y \
+    libssl3 \
+    libpcre2-8-0 \
+    libargon2-1 \
+    libsodium23 \
+    libc-ares2 \
+    libcurl4 \
+    libjansson4 \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /build
+
+# Copy the built server from builder stage
+COPY --from=builder /build /build
+
+# Create a non-root user (or use existing user)
+RUN id -u unrealircd >/dev/null 2>&1 || (useradd -m unrealircd && echo "Created user unrealircd") \
+    && chown -R unrealircd:unrealircd /build
+
+USER unrealircd
+
+# Default command shows what was built
+CMD ["ls", "-lh", "/build/bin"]

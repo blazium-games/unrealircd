@@ -1,0 +1,76 @@
+# Dockerfile for testing UnrealIRCd with the test framework
+# Builds on top of the build stage
+
+FROM ubuntu:latest
+
+# Set environment variables
+ENV DEBIAN_FRONTEND=noninteractive \
+    NOSERVICES=1 \
+    RUNTESTFLAGS="-slightlyfast"
+
+# Install runtime dependencies and test framework dependencies
+RUN apt-get update && apt-get install -y \
+    libssl3 \
+    libpcre2-8-0 \
+    libargon2-1 \
+    libsodium23 \
+    libc-ares2 \
+    libcurl4 \
+    libjansson4 \
+    python3 \
+    python3-pip \
+    git \
+    dos2unix \
+    ca-certificates \
+    sudo \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Python dependencies for test framework
+RUN python3 -m pip install --break-system-packages pyasyncore \
+    && python3 -m pip install --break-system-packages pyasynchat
+
+# Create directories
+RUN mkdir -p /build/bin /build/modules /build/logs/test /tests
+
+WORKDIR /tests
+
+# Set working directory to where we'll clone tests
+WORKDIR /usr/src
+
+# The build output will be mounted at /build
+# We'll run tests from here
+
+# Create a script that clones tests and converts line endings
+RUN echo '#!/bin/bash' > /usr/local/bin/prepare-tests.sh && \
+    echo 'set -e' >> /usr/local/bin/prepare-tests.sh && \
+    echo '' >> /usr/local/bin/prepare-tests.sh && \
+    echo '# Create necessary directories' >> /usr/local/bin/prepare-tests.sh && \
+    echo 'mkdir -p ~/unrealircd/source/src/modules/third' >> /usr/local/bin/prepare-tests.sh && \
+    echo '' >> /usr/local/bin/prepare-tests.sh && \
+    echo 'cd /tmp' >> /usr/local/bin/prepare-tests.sh && \
+    echo 'rm -rf unrealircd-tests' >> /usr/local/bin/prepare-tests.sh && \
+    echo 'git clone -q --branch master https://github.com/blazium-engine/unrealircd-tests.git unrealircd-tests' >> /usr/local/bin/prepare-tests.sh && \
+    echo '' >> /usr/local/bin/prepare-tests.sh && \
+    echo 'cd unrealircd-tests' >> /usr/local/bin/prepare-tests.sh && \
+    echo '' >> /usr/local/bin/prepare-tests.sh && \
+    echo '# Convert all test scripts to Unix line endings' >> /usr/local/bin/prepare-tests.sh && \
+    echo 'find . -type f ! -name "*.conf" ! -name "*.txt" ! -name "*.md" ! -name "*.pem" ! -name "*.db" ! -name "*.gz" -exec dos2unix {} \; 2>/dev/null || true' >> /usr/local/bin/prepare-tests.sh && \
+    echo '' >> /usr/local/bin/prepare-tests.sh && \
+    echo '# Fix permissions' >> /usr/local/bin/prepare-tests.sh && \
+    echo 'chmod +x run' >> /usr/local/bin/prepare-tests.sh && \
+    echo 'chmod +x irctestframework/wrapper' >> /usr/local/bin/prepare-tests.sh && \
+    echo 'find tests -type f ! -name "*.conf" ! -name "*.txt" ! -name "*.md" -exec chmod +x {} \;' >> /usr/local/bin/prepare-tests.sh && \
+    echo '' >> /usr/local/bin/prepare-tests.sh && \
+    echo 'echo "Test framework prepared with Unix line endings"' >> /usr/local/bin/prepare-tests.sh && \
+    chmod +x /usr/local/bin/prepare-tests.sh
+
+# Create unrealircd user and set up directories
+RUN id -u unrealircd >/dev/null 2>&1 || (useradd -m unrealircd && echo "Created user unrealircd") \
+    && mkdir -p /build/conf/tls /build/logs/test /home/unrealircd/conf/tls \
+    && cp /etc/ssl/certs/ca-certificates.crt /build/conf/tls/curl-ca-bundle.crt \
+    && cp /etc/ssl/certs/ca-certificates.crt /home/unrealircd/conf/tls/curl-ca-bundle.crt \
+    && chown -R unrealircd:unrealircd /build /tests /home/unrealircd 2>/dev/null || true \
+    && echo "unrealircd ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers.d/unrealircd
+
+# Default command - will be overridden by docker run
+CMD ["bash", "-c", "echo 'Test container ready. Mount build output to /build and run tests.'"]
