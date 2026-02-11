@@ -91,3 +91,8 @@ src/macosx/pods/
 
 # Doxygen generated files
 doc/doxygen/
+
+# Ignore
+ignore/
+plan/
+*.md
