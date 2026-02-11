@@ -1,22 +1,26 @@
 #!/usr/bin/env bash
 #
-# pull-and-setup.sh - Clone or pull UnrealIRCd repo with recursive submodules (using GitHub token),
-#                     optionally build the server with --setup.
+# pull-and-setup.sh - Copy this script to your Ubuntu server and run it to download
+#                     (or pull) the UnrealIRCd repo with tests submodule, then optionally
+#                     build the IRCd so it can be configured and run.
 #
-# For Ubuntu. Run on the server to download/pull the repo. No root, no apt-get; build
-# dependencies must already be installed (e.g. build-essential, libssl-dev, libpcre2-dev, etc.).
+# Intended use: copy the file to the server (e.g. scp), set GITHUB_TOKEN and REPO_URL,
+# then run e.g. ./pull-and-setup.sh unrealircd --setup to clone into ./unrealircd and build.
+#
+# For Ubuntu. No root, no apt-get; build dependencies must already be installed on the
+# server (e.g. build-essential, libssl-dev, libpcre2-dev, etc.).
 #
 # Environment:
 #   GITHUB_TOKEN or GITHUB_PAT  - Required for clone or submodule update (private repos).
-#   REPO_URL                     - Optional. Repo URL for initial clone (e.g. https://github.com/blazium-games/unrealircd.git).
-#                                  If omitted when cloning, script exits with usage.
+#   REPO_URL                     - Required for initial clone (e.g. https://github.com/blazium-games/unrealircd.git).
 #
-# Usage:
-#   From repo root:   ./scripts/pull-and-setup.sh [--setup]
-#   From parent dir:  ./scripts/pull-and-setup.sh [DIR] [--setup]
+# Usage (on server):
+#   Clone into DIR and build:     ./pull-and-setup.sh DIR --setup
+#   Clone into DIR only:          ./pull-and-setup.sh DIR
+#   Pull existing repo and build: cd DIR && ./pull-and-setup.sh --setup
 #
-#   --setup, -s  After clone/pull, fix execute bits and run extras/build-tests/nix/build
-#                (installs to $HOME/unrealircd).
+#   --setup, -s  After clone/pull, fix execute bits and run the nix build
+#                (installs to $HOME/unrealircd so you can configure and run the IRCd).
 #
 set -e
 
